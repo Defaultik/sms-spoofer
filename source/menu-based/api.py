@@ -6,7 +6,7 @@ from vonage_sms import SmsMessage, SmsResponse
 from vonage_account import Balance
 
 
-def send_sms(number, sender, text):
+def send_sms(number: str, sender: str, text: str) -> SmsResponse:
     config = configparser.ConfigParser()
     config.read(os.path.join("data", "config.ini"))
 
@@ -24,7 +24,7 @@ def send_sms(number, sender, text):
     return response
 
 
-def get_balance():
+def get_balance() -> str:
     config = configparser.ConfigParser()
     config.read(os.path.join("data", "config.ini"))
 
@@ -34,7 +34,6 @@ def get_balance():
     )
 
     client = Vonage(auth=auth)
-
     balance: Balance = client.account.get_balance()
 
-    return (f'{balance.value:0.2f} EUR')
+    return (f"{balance.value:0.2f} EUR")
