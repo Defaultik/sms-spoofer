@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com/?font=Fira+Code&size=30&pause=1000&color=00D4FF&center=true&vCenter=true&width=500&lines=sms-spoofer" alt="Typing SVG" />
+<img src="https://i.imgur.com/6HLZFv2.png" alt="SMS Spoofer banner" />
 
 <br/>
 
@@ -23,7 +23,7 @@ A clean CLI, Perfect for any use case where the sender name matters
 
 ## 📸 Preview
 
-> ![alt-text](https://i.imgur.com/zsosj2D.png)
+> ![alt-text](https://i.imgur.com/q5lt3sE.png)
 
 ---
 
@@ -54,20 +54,14 @@ This is the same mechanism used by legitimate services worldwide — OTP codes, 
 
 **Requirements:** Python 3.10+ (verified version), [Vonage account](https://ui.idp.vonage.com/ui/auth/registration)
 
+### 1. Installation
 ```bash
-# 1. Clone the repo
+# Clone the repo
 git clone https://github.com/Defaultik/sms-spoofer.git
 cd sms-spoofer
-
-# 3. Run
-## Menu Based
-python source/menu/main.py
-
-## Command Based
-python source/command/sms_spoofer.py
 ```
 
-### Installing dependencies
+### 2. Installing dependencies
 <details><summary>pip</summary>
   
 ```bash
@@ -82,6 +76,15 @@ uv sync
 ```
 </details>
 
+### 3. Run
+```bash
+# GUI Version
+python source/menu/main.py
+
+# CLI VERSION
+python source/command/sms_spoofer.py
+```
+
 ---
 
 ## 🎬 Usage
@@ -89,8 +92,8 @@ uv sync
 Once launched, you'll be greeted by an interactive menu. Simply:
 
 1. Enter your **Vonage API Key** and **API Secret** (found in your [Vonage Dashboard](https://dashboard.nexmo.com/))
-2. Specify the **Sender Name** (what the recipient will see instead of a number)
-3. Enter the **recipient's phone number** in international format (e.g. `+1001234567`)
+2. Enter the **recipient's phone number** in international format (e.g. `+1001234567`)
+3. Specify the **Sender ID** (what the recipient will see instead of a number)
 4. Type your **message**
 5. Hit send ✉️
 
