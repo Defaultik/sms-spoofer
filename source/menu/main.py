@@ -1,7 +1,10 @@
 import configparser
 import os
 import csv
-from api import send_sms, get_balance
+from getpass import getpass
+from api import send_sms, get_balance, reset_client_cache
+
+_PHONE_JUNK = str.maketrans("", "", "+- ")
 
 
 BANNER = r"""
@@ -18,7 +21,7 @@ def print_options(*args) -> None:
 
 
 def normalize(num: str) -> str:
-    return num.replace("+", "").replace("-", "").replace(" ", "")
+    return num.translate(_PHONE_JUNK)
 
 
 def load_config(path: str) -> configparser.ConfigParser:
@@ -41,14 +44,13 @@ def init() -> None:
 
     if not os.path.exists(config_path):
         api_key = input("Enter your Vonage API key: ")
-        api_secret = input("Enter your Vonage API Secret: ")
+        api_secret = getpass("Enter your Vonage API Secret: ")
 
         config = configparser.ConfigParser()
         config["api_credentials"] = {"api_key": api_key, "api_secret": api_secret}
         with open(config_path, "w") as f:
             config.write(f)
 
-    config = load_config(config_path)
     main()
 
 
@@ -119,9 +121,10 @@ def dial_multi() -> None:
 
 def open_contacts() -> None:
     with open("data/contacts.csv") as f:
-        reader = csv.DictReader(f)
-        for num, row in enumerate(reader):
-            print(f"[{num + 1}]", row["name"])
+        rows = list(csv.DictReader(f))
+
+    for num, row in enumerate(rows):
+        print(f"[{num + 1}]", row["name"])
 
     print("\n[*] Create a new contact")
     print("[X] Back")
@@ -133,14 +136,11 @@ def open_contacts() -> None:
         new_contact()
     else:
         try:
-            with open("data/contacts.csv") as f:
-                rows = list(csv.DictReader(f))
-
             num = rows[int(task) - 1]["phone_number"]
             send_sms(num, input("Sender name: "), input("Text: "))
         except (ValueError, IndexError):
             print("ERROR: Invalid option")
-            
+
     return
 
 
@@ -161,11 +161,13 @@ def update_api() -> None:
     sure = input("Are you sure you want to change API Credentials (Y/N): ")
     if sure.lower() == "y":
         config.set("api_credentials", "api_key", input("Enter new API key: "))
-        config.set("api_credentials", "api_secret", input("Enter new API secret: "))
+        config.set("api_credentials", "api_secret", getpass("Enter new API secret: "))
 
         with open("data/config.ini", "w") as f:
             config.write(f)
-        
+
+        reset_client_cache()
+
 
 if __name__ == "__main__":
     init()
