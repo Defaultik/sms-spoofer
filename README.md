@@ -4,7 +4,7 @@
 
 <br/>
 
-[![Python](https://img.shields.io/badge/Python-3.14%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Vonage](https://img.shields.io/badge/Powered%20by-Vonage%20API-C000C0?style=flat-square)](https://www.vonage.com/communications-apis/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-informational?style=flat-square)](https://github.com/Defaultik/sms_spoofer)
 [![Stars](https://img.shields.io/github/stars/Defaultik/sms_spoofer?style=flat-square&color=yellow)](https://github.com/Defaultik/sms_spoofer/stargazers)
@@ -52,7 +52,7 @@ This is the same mechanism used by legitimate services worldwide — OTP codes, 
 
 ## 🚀 Quick Start
 
-**Requirements:** Python 3.14+ (verified version), [Vonage account](https://ui.idp.vonage.com/ui/auth/registration)
+**Requirements:** Python 3.10+ (verified version), [Vonage account](https://ui.idp.vonage.com/ui/auth/registration)
 
 ```bash
 # 1. Clone the repo
