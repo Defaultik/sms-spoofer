@@ -1,11 +1,17 @@
 [project]
 name = "sms-spoofer"
-version = "0.1.0"
-description = "Add your description here"
+version = "2.0.0"
+description = "Cross-platform Python utility to send SMS with a custom Sender ID via the Vonage API"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "vonage>=4.0.0",
     "vonage-account>=1.0.0",
     "vonage-sms>=1.0.0",
+    "flet[desktop]>=1.0.0",
+    "requests>=2.32.0",
 ]
+
+[project.urls]
+Author = "https://github.com/Defaultik"
+Repository = "https://github.com/Defaultik/sms-spoofer.git"
