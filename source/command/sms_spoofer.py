@@ -6,6 +6,8 @@ from getpass import getpass
 from vonage import Vonage, Auth
 from vonage_sms import SmsMessage, SmsResponse
 
+_PHONE_JUNK = str.maketrans("", "", "+- ")
+
 
 class ArgsParser:
     def __init__(self):
@@ -24,7 +26,7 @@ def normalize(phone_number: str) -> str:
     """
     :param phone_number: Description
     """
-    return phone_number.replace("+", "").replace("-", "").replace(" ", "")
+    return phone_number.translate(_PHONE_JUNK)
 
 
 def main() -> None:
@@ -47,19 +49,17 @@ def main() -> None:
 
     config.read("config.ini")
 
-    send_sms(normalize(args.number), args.sender, args.text)
+    send_sms(normalize(args.number), args.sender, args.text, config)
 
 
-def send_sms(number: str, sender: str, text: str) -> SmsResponse:
-    """    
+def send_sms(number: str, sender: str, text: str, config: configparser.ConfigParser) -> SmsResponse:
+    """
     :param number: victim's phone number
     :param sender: sender's name (callerid)
     :param text: text of the sms
+    :param config: already-loaded credentials (avoids re-reading config.ini from disk)
     :rtype: SmsResponse
     """
-    config = configparser.ConfigParser()
-    config.read("config.ini")
-    
     auth = Auth(
         api_key=config["api_credentials"]["api_key"], 
         api_secret=config["api_credentials"]["api_secret"]
