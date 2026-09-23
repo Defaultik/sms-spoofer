@@ -27,23 +27,13 @@ def is_valid_api_key(api_key: str) -> bool:
 
 
 def is_valid_api_secret(api_secret: str) -> bool:
-    """Secrets vary in format across accounts, so this only rules out the
-    obviously wrong (empty, whitespace, way too short)."""
     secret = api_secret or ""
     return secret == secret.strip() and len(secret) >= 6
 
 
 def verify_credentials(api_key: str, api_secret: str) -> None:
-    """Calls the Vonage Account API to confirm this key/secret pair actually
-    belongs to a real account. Raises CredentialsInvalidError if Vonage
-    rejects them, or CredentialsUnverifiableError if Vonage couldn't be
-    reached at all; returns normally if they're good.
-
-    Deliberately bypasses the cached client from _get_client() — this is
-    used to check credentials before they're saved, and shouldn't poison the
-    cache with a client built from values that may still change.
-    """
     client = Vonage(auth=Auth(api_key=api_key, api_secret=api_secret))
+    
     try:
         client.account.get_balance()
     except AuthenticationError as exc:

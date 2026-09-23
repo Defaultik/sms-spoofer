@@ -20,13 +20,10 @@ CONTACTS_FIELDS = ("name", "phone_number")
 
 _PHONE_JUNK = str.maketrans("", "", "+- ")
 
-# Update check — the repo ships via `git clone` of the main branch, and the
-# version lives in the repo-root pyproject.toml, so "latest" is just that same
-# field read straight off main.
 GITHUB_PYPROJECT_URL = (
     "https://raw.githubusercontent.com/Defaultik/sms-spoofer/main/pyproject.toml"
 )
-UPDATE_CHECK_TIMEOUT = 6  # seconds
+UPDATE_CHECK_TIMEOUT = 6  # Seconds
 
 
 def normalize(phone_number: str) -> str:
@@ -81,8 +78,10 @@ def ensure_data_dir() -> None:
 def credentials_exist() -> bool:
     if not os.path.exists(CONFIG_PATH):
         return False
+    
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
+
     return config.has_option("api_credentials", "api_key") and config.has_option(
         "api_credentials", "api_secret"
     )
@@ -91,6 +90,7 @@ def credentials_exist() -> bool:
 def get_credentials() -> tuple[str, str] | None:
     if not credentials_exist():
         return None
+    
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
     return (
