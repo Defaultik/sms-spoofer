@@ -1,11 +1,3 @@
-"""
-sms-spoofer GUI — a Flet (https://flet.dev) desktop front-end that replaces
-the old interactive CLI menu (source/menu). All Vonage / storage logic lives
-in api.py; this module is UI only.
-
-Run with: python source/gui/main.py
-"""
-
 import sys
 import os
 
@@ -28,13 +20,12 @@ SUCCESS = "#33D17A"
 WARNING = "#F5A623"
 DANGER = "#FF5C7A"
 AVATAR_BG = "#2A2050"
-VERSION_LABEL = "#3F4358"  # dark gray, deliberately low-contrast on the rail
+VERSION_LABEL = "#3F4358"
 
 RADIUS = 14
 
 
 def read_version() -> str:
-    """Project version from the repo-root pyproject.toml (v2.0.0 style)."""
     pyproject = os.path.join(os.path.dirname(__file__), "..", "..", "pyproject.toml")
     try:
         with open(pyproject, encoding="utf-8") as f:
@@ -43,11 +34,11 @@ def read_version() -> str:
                     return line.split("=", 1)[1].strip().strip("\"'")
     except OSError:
         pass
+
     return ""
 
 
 # Style
-
 def border_all(color: str, width: float = 1) -> ft.Border:
     side = ft.BorderSide(width, color)
     return ft.Border(top=side, right=side, bottom=side, left=side)
@@ -62,7 +53,6 @@ def pad(v: float = 0, h: float = 0) -> ft.Padding:
 
 
 # Controls
-
 def card(content: ft.Control, width=None, height=None, expand=None, padding=20) -> ft.Container:
     return ft.Container(
         content=content,
@@ -81,6 +71,7 @@ def section_title(text: str, subtitle: str = "") -> ft.Column:
     controls = [ft.Text(text, size=20, weight=ft.FontWeight.W_600, color=TEXT)]
     if subtitle:
         controls.append(ft.Text(subtitle, size=13, color=TEXT_MUTED))
+
     return ft.Column(controls, spacing=2, tight=True)
 
 
@@ -151,8 +142,6 @@ def text_field(label, hint="", password=False, multiline=False, lines=1,
 
 
 def sender_id_field() -> ft.TextField:
-    """Sender ID field with the 11-char limit shown inline as a live counter
-    (instead of Flet's default below-the-field counter)."""
     field = text_field("Sender ID", "e.g. YourBrand", max_length=11, icon=ft.Icons.BADGE_ROUNDED)
     field.counter = ""
     counter_text = ft.Text("0/11", size=11, color=TEXT_MUTED)
@@ -386,6 +375,7 @@ def main(page: ft.Page) -> None:
             if not numbers:
                 notify("Select at least one contact or add a number.", ok=False)
                 return
+            
             if not sender.value or not message.value:
                 notify("Fill in sender and message first.", ok=False)
                 return
