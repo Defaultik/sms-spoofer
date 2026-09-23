@@ -180,6 +180,7 @@ def main(page: ft.Page) -> None:
     page.theme_mode = ft.ThemeMode.DARK
     page.theme = ft.Theme(color_scheme_seed=ACCENT, use_material3=True)
     page.window.bgcolor = BG
+    page.window.visible = False
 
     def size_window(width: int, height: int, min_width: int, min_height: int) -> None:
         page.window.width = width
@@ -813,6 +814,15 @@ def main(page: ft.Page) -> None:
         )
         page.update()
 
+    async def reveal() -> None:
+        await page.window.wait_until_ready_to_show()
+        await page.window.center()
+
+        page.window.visible = True
+        
+        await page.window.to_front()
+        page.update()
+
     api.ensure_data_dir()
     if api.credentials_exist():
         set_app_window()
@@ -823,6 +833,8 @@ def main(page: ft.Page) -> None:
     else:
         show_onboarding()
 
+    page.run_task(reveal)
+
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, view=ft.AppView.FLET_APP_HIDDEN)
