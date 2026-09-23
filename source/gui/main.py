@@ -1,11 +1,3 @@
-"""
-sms-spoofer GUI — a Flet (https://flet.dev) desktop front-end that replaces
-the old interactive CLI menu (source/menu). All Vonage / storage logic lives
-in api.py; this module is UI only.
-
-Run with: python source/gui/main.py
-"""
-
 import sys
 import os
 
@@ -13,6 +5,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import flet as ft
 import api
+import vonage_api
 
 # Palette
 
@@ -24,15 +17,15 @@ ACCENT = "#7C5CFF"
 TEXT = "#F2F2F7"
 TEXT_MUTED = "#8B8FA3"
 SUCCESS = "#33D17A"
+WARNING = "#F5A623"
 DANGER = "#FF5C7A"
 AVATAR_BG = "#2A2050"
-VERSION_LABEL = "#3F4358"  # dark gray, deliberately low-contrast on the rail
+VERSION_LABEL = "#3F4358"
 
 RADIUS = 14
 
 
 def read_version() -> str:
-    """Project version from the repo-root pyproject.toml (v2.0.0 style)."""
     pyproject = os.path.join(os.path.dirname(__file__), "..", "..", "pyproject.toml")
     try:
         with open(pyproject, encoding="utf-8") as f:
@@ -41,11 +34,11 @@ def read_version() -> str:
                     return line.split("=", 1)[1].strip().strip("\"'")
     except OSError:
         pass
+
     return ""
 
 
 # Style
-
 def border_all(color: str, width: float = 1) -> ft.Border:
     side = ft.BorderSide(width, color)
     return ft.Border(top=side, right=side, bottom=side, left=side)
@@ -60,7 +53,6 @@ def pad(v: float = 0, h: float = 0) -> ft.Padding:
 
 
 # Controls
-
 def card(content: ft.Control, width=None, height=None, expand=None, padding=20) -> ft.Container:
     return ft.Container(
         content=content,
@@ -79,6 +71,7 @@ def section_title(text: str, subtitle: str = "") -> ft.Column:
     controls = [ft.Text(text, size=20, weight=ft.FontWeight.W_600, color=TEXT)]
     if subtitle:
         controls.append(ft.Text(subtitle, size=13, color=TEXT_MUTED))
+
     return ft.Column(controls, spacing=2, tight=True)
 
 
@@ -149,8 +142,6 @@ def text_field(label, hint="", password=False, multiline=False, lines=1,
 
 
 def sender_id_field() -> ft.TextField:
-    """Sender ID field with the 11-char limit shown inline as a live counter
-    (instead of Flet's default below-the-field counter)."""
     field = text_field("Sender ID", "e.g. YourBrand", max_length=11, icon=ft.Icons.BADGE_ROUNDED)
     field.counter = ""
     counter_text = ft.Text("0/11", size=11, color=TEXT_MUTED)
@@ -181,7 +172,6 @@ def primary_button(text, icon=None, on_click=None, expand=None) -> ft.FilledButt
 
 
 # App
-
 def main(page: ft.Page) -> None:
     page.title = "SMS Spoofer - github.com/Defaultik"
     page.window.icon = "icon.ico"
@@ -209,7 +199,6 @@ def main(page: ft.Page) -> None:
     balance_ring = ft.ProgressRing(width=14, height=14, stroke_width=2, color=ACCENT, visible=False)
 
     # Notifications
-
     def notify(message: str, ok: bool = True) -> None:
         page.show_dialog(
             ft.SnackBar(
@@ -232,47 +221,48 @@ def main(page: ft.Page) -> None:
     def validated_credentials(
         key_field: ft.TextField, secret_field: ft.TextField
     ) -> tuple[str, str] | None:
-        """Shared validation for the onboarding and settings credential forms:
-        clears field errors, checks the entered key/secret, and returns the
-        cleaned pair — or None (after showing a message) if anything is wrong."""
         key_field.error = None
         secret_field.error = None
+
         key = (key_field.value or "").strip()
         secret = (secret_field.value or "").strip()
+
         if not key or not secret:
             notify("API key and secret can't be empty.", ok=False)
             return None
-        if not api.is_valid_api_key(key):
+        
+        if not vonage_api.is_valid_api_key(key):
             key_field.error = "Should be an 8-character key (0-9, a-f)"
             key_field.update()
             notify("That doesn't look like a valid Vonage API key.", ok=False)
             return None
-        if not api.is_valid_api_secret(secret):
+        
+        if not vonage_api.is_valid_api_secret(secret):
             secret_field.error = "That looks too short for a Vonage API secret"
             secret_field.update()
             notify("That doesn't look like a valid Vonage API secret.", ok=False)
             return None
+        
         return key, secret
 
     # Balance
-
     def refresh_balance(e=None) -> None:
         balance_ring.visible = True
         page.update()
 
         def worker():
             try:
-                value = api.get_balance()
+                value = vonage_api.get_balance()
                 balance_text.value = f"{value:.2f} EUR"
             except Exception:
                 balance_text.value = "— EUR"
+
             balance_ring.visible = False
             page.update()
 
         page.run_thread(worker)
 
     # Single Send
-
     def build_single_send() -> ft.Control:
         number = text_field("Recipient number", "+1001234567", icon=ft.Icons.PHONE_IPHONE_ROUNDED)
         sender = sender_id_field()
@@ -296,7 +286,7 @@ def main(page: ft.Page) -> None:
 
             def worker():
                 try:
-                    api.send_sms(number.value, sender.value, message.value)
+                    vonage_api.send_sms(number.value, sender.value, message.value)
                     notify("Message sent successfully.")
                     message.value = ""
                 except Exception as exc:
@@ -331,7 +321,6 @@ def main(page: ft.Page) -> None:
         )
 
     # Multiple Send
-
     def build_multi_send() -> ft.Control:
         contacts = api.load_contacts()
         checkboxes: list[ft.Checkbox] = []
@@ -361,8 +350,6 @@ def main(page: ft.Page) -> None:
         manual = text_field("Extra numbers (one per line)", "+1001234567\n+1009876543",
                              multiline=True, lines=3)
         sender = sender_id_field()
-        # fills whatever vertical space is left in the (fixed-height) Compose
-        # card, which also pins the send button to the bottom of it
         message = text_field("Message", "Type your text…", multiline=True, expand=True)
         send_btn = primary_button("Send to all", icon=ft.Icons.SEND_AND_ARCHIVE_ROUNDED)
 
@@ -388,6 +375,7 @@ def main(page: ft.Page) -> None:
             if not numbers:
                 notify("Select at least one contact or add a number.", ok=False)
                 return
+            
             if not sender.value or not message.value:
                 notify("Fill in sender and message first.", ok=False)
                 return
@@ -400,7 +388,7 @@ def main(page: ft.Page) -> None:
                 failed = 0
                 for n in numbers:
                     try:
-                        api.send_sms(n, sender.value, message.value)
+                        vonage_api.send_sms(n, sender.value, message.value)
                     except Exception:
                         failed += 1
                 if failed:
@@ -454,7 +442,6 @@ def main(page: ft.Page) -> None:
         )
 
     # Contacts
-
     def build_contacts() -> ft.Control:
         name_f = text_field("Name", "Jane Doe", icon=ft.Icons.PERSON_ROUNDED, expand=1)
         phone_f = text_field("Phone number", "+1001234567", icon=ft.Icons.PHONE_IPHONE_ROUNDED, expand=1)
@@ -573,12 +560,12 @@ def main(page: ft.Page) -> None:
 
             def worker():
                 try:
-                    api.verify_credentials(key, secret)
-                except api.CredentialsInvalidError:
+                    vonage_api.verify_credentials(key, secret)
+                except vonage_api.CredentialsInvalidError:
                     secret_f.error = "No Vonage account found for this key and secret"
                     secret_f.update()
                     notify("Vonage rejected those credentials — no such account.", ok=False)
-                except api.CredentialsUnverifiableError as exc:
+                except vonage_api.CredentialsUnverifiableError as exc:
                     notify(f"Couldn't reach Vonage to verify credentials: {describe_error(exc)}", ok=False)
                 else:
                     api.save_credentials(key, secret)
@@ -638,6 +625,31 @@ def main(page: ft.Page) -> None:
 
     version = read_version()
 
+    update_icon = ft.Icon(ft.Icons.CIRCLE, size=13, visible=False)
+
+    def apply_update_status(latest: str | None) -> None:
+        if not latest:
+            return
+        if api.is_outdated(version, latest):
+            update_icon.icon = ft.Icons.ARROW_CIRCLE_UP_ROUNDED
+            update_icon.color = WARNING
+            update_icon.tooltip = (
+                f"Version v{latest} is available\n"
+                "   Update with git pull"
+            )
+        else:
+            update_icon.icon = ft.Icons.CHECK_CIRCLE_ROUNDED
+            update_icon.color = SUCCESS
+            update_icon.tooltip = "You're on the latest version."
+        update_icon.visible = True
+        page.update()
+
+    def start_update_check() -> None:
+        if not version:
+            return
+        
+        page.run_thread(lambda: apply_update_status(api.fetch_latest_version()))
+
     rail = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
@@ -657,7 +669,12 @@ def main(page: ft.Page) -> None:
     if version:
         rail_children.append(
             ft.Container(
-                content=ft.Text(f"v{version}", size=11, color=VERSION_LABEL),
+                content=ft.Row(
+                    [update_icon, ft.Text(f"v{version}", size=11, color=VERSION_LABEL)],
+                    spacing=5,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    tight=True,
+                ),
                 alignment=ft.Alignment.CENTER,
                 padding=ft.Padding(left=0, right=0, top=8, bottom=16),
             )
@@ -713,15 +730,15 @@ def main(page: ft.Page) -> None:
 
             def worker():
                 try:
-                    api.verify_credentials(key, secret)
-                except api.CredentialsInvalidError:
+                    vonage_api.verify_credentials(key, secret)
+                except vonage_api.CredentialsInvalidError:
                     secret_f.error = "No Vonage account found for this key and secret"
                     secret_f.update()
                     notify("Vonage rejected those credentials — no such account.", ok=False)
                     start_btn.disabled = False
                     start_btn.content = "Continue"
                     page.update()
-                except api.CredentialsUnverifiableError as exc:
+                except vonage_api.CredentialsUnverifiableError as exc:
                     notify(f"Couldn't reach Vonage to verify credentials: {describe_error(exc)}", ok=False)
                     start_btn.disabled = False
                     start_btn.content = "Continue"
@@ -733,6 +750,7 @@ def main(page: ft.Page) -> None:
                     page.add(app_shell)
                     show_view(0)
                     refresh_balance()
+                    start_update_check()
 
             page.run_thread(worker)
 
@@ -801,6 +819,7 @@ def main(page: ft.Page) -> None:
         page.add(app_shell)
         show_view(0)
         refresh_balance()
+        start_update_check()
     else:
         show_onboarding()
 
