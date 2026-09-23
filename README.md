@@ -42,7 +42,7 @@ This is the same mechanism used by legitimate services worldwide — OTP codes, 
 | Feature | Details |
 |--------|---------|
 | 🖥️ **Cross-Platform** | Runs natively on Windows, Linux, and macOS |
-| 🎛️ **Menu-Based CLI** | Interactive terminal interface, no config files needed |
+| 🎛️ **Beautiful GUI** | Interactive graphical interface |
 | 🐍 **Pure Python** | No compiled binaries, fully readable source code |
 | 🗣️ **Unicode Support** | Works in English, Russian, Chinese, Arabic, and more |
 | 🏷️ **Custom Sender ID** | Set any alphanumeric name as the sender (up to 11 chars) |
@@ -79,7 +79,7 @@ uv sync
 ### 3. Run
 ```bash
 # GUI Version
-python source/menu/main.py
+python source/gui/main.py
 
 # CLI VERSION
 python source/command/sms_spoofer.py
