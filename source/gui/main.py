@@ -26,8 +26,22 @@ TEXT_MUTED = "#8B8FA3"
 SUCCESS = "#33D17A"
 DANGER = "#FF5C7A"
 AVATAR_BG = "#2A2050"
+VERSION_LABEL = "#3F4358"  # dark gray, deliberately low-contrast on the rail
 
 RADIUS = 14
+
+
+def read_version() -> str:
+    """Project version from the repo-root pyproject.toml (v2.0.0 style)."""
+    pyproject = os.path.join(os.path.dirname(__file__), "..", "..", "pyproject.toml")
+    try:
+        with open(pyproject, encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("version"):
+                    return line.split("=", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return ""
 
 
 # Style
@@ -45,7 +59,7 @@ def pad(v: float = 0, h: float = 0) -> ft.Padding:
     return ft.Padding(left=h, right=h, top=v, bottom=v)
 
 
-# --------------------------------------------------------------- controls --
+# Controls
 
 def card(content: ft.Control, width=None, height=None, expand=None, padding=20) -> ft.Container:
     return ft.Container(
@@ -166,7 +180,7 @@ def primary_button(text, icon=None, on_click=None, expand=None) -> ft.FilledButt
     )
 
 
-# App Settings
+# App
 
 def main(page: ft.Page) -> None:
     page.title = "SMS Spoofer - github.com/Defaultik"
@@ -177,25 +191,24 @@ def main(page: ft.Page) -> None:
     page.theme = ft.Theme(color_scheme_seed=ACCENT, use_material3=True)
     page.window.bgcolor = BG
 
-    def set_app_window() -> None:
-        page.window.width = 980
-        page.window.height = 660
-        page.window.min_width = 880
-        page.window.min_height = 600
+    def size_window(width: int, height: int, min_width: int, min_height: int) -> None:
+        page.window.width = width
+        page.window.height = height
+        page.window.min_width = min_width
+        page.window.min_height = min_height
         page.run_task(page.window.center)
 
+    def set_app_window() -> None:
+        size_window(980, 660, 880, 600)
+
     def set_onboarding_window() -> None:
-        page.window.width = 480
-        page.window.height = 460
-        page.window.min_width = 480
-        page.window.min_height = 460
-        page.run_task(page.window.center)
+        size_window(480, 460, 480, 460)
 
     view_title = ft.Text("Single Send", size=18, weight=ft.FontWeight.W_600, color=TEXT)
     balance_text = ft.Text("···", size=13, weight=ft.FontWeight.W_600, color=TEXT)
     balance_ring = ft.ProgressRing(width=14, height=14, stroke_width=2, color=ACCENT, visible=False)
 
-    # Error Window
+    # Notifications
 
     def notify(message: str, ok: bool = True) -> None:
         page.show_dialog(
@@ -215,6 +228,31 @@ def main(page: ft.Page) -> None:
 
     def describe_error(exc: Exception) -> str:
         return str(exc) or exc.__class__.__name__
+
+    def validated_credentials(
+        key_field: ft.TextField, secret_field: ft.TextField
+    ) -> tuple[str, str] | None:
+        """Shared validation for the onboarding and settings credential forms:
+        clears field errors, checks the entered key/secret, and returns the
+        cleaned pair — or None (after showing a message) if anything is wrong."""
+        key_field.error = None
+        secret_field.error = None
+        key = (key_field.value or "").strip()
+        secret = (secret_field.value or "").strip()
+        if not key or not secret:
+            notify("API key and secret can't be empty.", ok=False)
+            return None
+        if not api.is_valid_api_key(key):
+            key_field.error = "Should be an 8-character key (0-9, a-f)"
+            key_field.update()
+            notify("That doesn't look like a valid Vonage API key.", ok=False)
+            return None
+        if not api.is_valid_api_secret(secret):
+            secret_field.error = "That looks too short for a Vonage API secret"
+            secret_field.update()
+            notify("That doesn't look like a valid Vonage API secret.", ok=False)
+            return None
+        return key, secret
 
     # Balance
 
@@ -524,25 +562,10 @@ def main(page: ft.Page) -> None:
         save_btn = primary_button("Save credentials", icon=ft.Icons.SAVE_ROUNDED)
 
         def do_save(e):
-            key_f.error = None
-            secret_f.error = None
-
-            key = (key_f.value or "").strip()
-            secret = (secret_f.value or "").strip()
-
-            if not key or not secret:
-                notify("API key and secret can't be empty.", ok=False)
+            creds = validated_credentials(key_f, secret_f)
+            if creds is None:
                 return
-            if not api.is_valid_api_key(key):
-                key_f.error = "Should be an 8-character key (0-9, a-f)"
-                key_f.update()
-                notify("That doesn't look like a valid Vonage API key.", ok=False)
-                return
-            if not api.is_valid_api_secret(secret):
-                secret_f.error = "That looks too short for a Vonage API secret"
-                secret_f.update()
-                notify("That doesn't look like a valid Vonage API secret.", ok=False)
-                return
+            key, secret = creds
 
             save_btn.disabled = True
             save_btn.content = "Verifying…"
@@ -613,6 +636,8 @@ def main(page: ft.Page) -> None:
         )
         page.update()
 
+    version = read_version()
+
     rail = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
@@ -620,11 +645,27 @@ def main(page: ft.Page) -> None:
         min_extended_width=180,
         bgcolor=SURFACE,
         indicator_color=ft.Colors.with_opacity(0.16, ACCENT),
+        expand=True,
         destinations=[
             ft.NavigationRailDestination(icon=icon, selected_icon=icon, label=label)
             for label, icon, _ in views
         ],
         on_change=lambda e: show_view(e.control.selected_index),
+    )
+
+    rail_children = [rail]
+    if version:
+        rail_children.append(
+            ft.Container(
+                content=ft.Text(f"v{version}", size=11, color=VERSION_LABEL),
+                alignment=ft.Alignment.CENTER,
+                padding=ft.Padding(left=0, right=0, top=8, bottom=16),
+            )
+        )
+    rail_pane = ft.Container(
+        content=ft.Column(rail_children, spacing=0, expand=True,
+                          horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor=SURFACE,
     )
 
     header = ft.Container(
@@ -649,7 +690,7 @@ def main(page: ft.Page) -> None:
     )
 
     app_shell = ft.Row(
-        [rail, ft.VerticalDivider(width=1, color=BORDER), ft.Column([header, content], spacing=0, expand=True)],
+        [rail_pane, ft.VerticalDivider(width=1, color=BORDER), ft.Column([header, content], spacing=0, expand=True)],
         spacing=0,
         expand=True,
     )
@@ -661,25 +702,10 @@ def main(page: ft.Page) -> None:
         start_btn = primary_button("Continue", icon=ft.Icons.ARROW_FORWARD_ROUNDED)
 
         def do_start(e):
-            key_f.error = None
-            secret_f.error = None
-
-            key = (key_f.value or "").strip()
-            secret = (secret_f.value or "").strip()
-
-            if not key or not secret:
-                notify("API key and secret can't be empty.", ok=False)
+            creds = validated_credentials(key_f, secret_f)
+            if creds is None:
                 return
-            if not api.is_valid_api_key(key):
-                key_f.error = "Should be an 8-character key (0-9, a-f)"
-                key_f.update()
-                notify("That doesn't look like a valid Vonage API key.", ok=False)
-                return
-            if not api.is_valid_api_secret(secret):
-                secret_f.error = "That looks too short for a Vonage API secret"
-                secret_f.update()
-                notify("That doesn't look like a valid Vonage API secret.", ok=False)
-                return
+            key, secret = creds
 
             start_btn.disabled = True
             start_btn.content = "Verifying…"
