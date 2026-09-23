@@ -1,3 +1,4 @@
+
 <div align="center">
 
 <img src="https://i.imgur.com/6HLZFv2.png" alt="SMS Spoofer banner" />
@@ -62,6 +63,10 @@ cd sms-spoofer
 ```
 
 ### 2. Installing dependencies
+
+> [!TIP]  
+> We recommend uv instead of pip — it's much faster and sets everything up for you with a single command.
+
 <details><summary>pip</summary>
   
 ```bash
@@ -81,7 +86,7 @@ uv sync
 # GUI Version
 python source/gui/main.py
 
-# CLI VERSION
+# CLI Version
 python source/command/sms_spoofer.py
 ```
 
@@ -154,5 +159,4 @@ This utility relies entirely on the **official public Vonage API**.
 I'll glad to get a star from you
 
 Made with ❤️ by [Defaultik](https://github.com/Defaultik)
-
 </div>
