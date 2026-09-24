@@ -12,8 +12,10 @@ import vonage_api
 BG = "#0D0E13"
 SURFACE = "#161822"
 SURFACE_2 = "#1D1F2C"
+SURFACE_3 = "#232635"
 BORDER = "#2A2D3D"
 ACCENT = "#7C5CFF"
+ACCENT_HOVER = "#8E71FF"
 TEXT = "#F2F2F7"
 TEXT_MUTED = "#8B8FA3"
 SUCCESS = "#33D17A"
@@ -90,7 +92,8 @@ def labeled(caption: str, field: ft.Control, expand: bool = False) -> ft.Column:
 
 
 def text_field(label, hint="", password=False, multiline=False, lines=1,
-                max_length=None, icon=None, expand=None, value="") -> ft.TextField:
+                max_length=None, icon=None, expand=None, value="",
+                autofocus=False, on_submit=None) -> ft.TextField:
     field = ft.TextField(
         label=None if multiline else label,
         hint_text=hint,
@@ -101,6 +104,8 @@ def text_field(label, hint="", password=False, multiline=False, lines=1,
         max_length=max_length,
         prefix_icon=icon,
         expand=expand,
+        autofocus=autofocus,
+        on_submit=on_submit,
         border={
             ft.ControlState.DEFAULT: ft.OutlineInputBorder(
                 border_radius=10, side=ft.BorderSide(1, BORDER)),
@@ -148,7 +153,9 @@ def sender_id_field() -> ft.TextField:
     field.suffix = counter_text
 
     def on_change(e):
-        counter_text.value = f"{len(field.value or '')}/11"
+        count = len(field.value or "")
+        counter_text.value = f"{count}/11"
+        counter_text.color = WARNING if count >= 11 else TEXT_MUTED
         field.update()
 
     field.on_change = on_change
@@ -162,13 +169,35 @@ def primary_button(text, icon=None, on_click=None, expand=None) -> ft.FilledButt
         on_click=on_click,
         expand=expand,
         style=ft.ButtonStyle(
-            bgcolor={ft.ControlState.DEFAULT: ACCENT, ft.ControlState.DISABLED: SURFACE_2},
+            bgcolor={
+                ft.ControlState.DEFAULT: ACCENT,
+                ft.ControlState.HOVERED: ACCENT_HOVER,
+                ft.ControlState.DISABLED: SURFACE_2,
+            },
             color={ft.ControlState.DEFAULT: "#FFFFFF", ft.ControlState.DISABLED: TEXT_MUTED},
             shape=ft.RoundedRectangleBorder(radius=10),
             padding=pad(16, 18),
             animation_duration=150,
         ),
     )
+
+
+def set_button_loading(button: ft.FilledButton, loading: bool, label: str, icon=None) -> None:
+    button.disabled = loading
+    if loading:
+        button.icon = None
+        button.content = ft.Row(
+            [
+                ft.ProgressRing(width=15, height=15, stroke_width=2, color="#FFFFFF"),
+                ft.Text(label, color="#FFFFFF", weight=ft.FontWeight.W_600),
+            ],
+            spacing=10,
+            tight=True,
+            alignment=ft.MainAxisAlignment.CENTER,
+        )
+    else:
+        button.icon = icon
+        button.content = label
 
 
 # App
@@ -195,9 +224,7 @@ def main(page: ft.Page) -> None:
     def set_onboarding_window() -> None:
         size_window(480, 460, 480, 460)
 
-    view_title = ft.Text("Single Send", size=18, weight=ft.FontWeight.W_600, color=TEXT)
-    balance_text = ft.Text("···", size=13, weight=ft.FontWeight.W_600, color=TEXT)
-    balance_ring = ft.ProgressRing(width=14, height=14, stroke_width=2, color=ACCENT, visible=False)
+    balance_controls: dict[str, ft.Control | str | None] = {"text": None, "button": None, "value": "···"}
 
     # Notifications
     def notify(message: str, ok: bool = True) -> None:
@@ -248,44 +275,90 @@ def main(page: ft.Page) -> None:
 
     # Balance
     def refresh_balance(e=None) -> None:
-        balance_ring.visible = True
+        text = balance_controls["text"]
+        button = balance_controls["button"]
+        if text is None or button is None:
+            return
+
+        button.icon = ft.ProgressRing(width=16, height=16, stroke_width=2, color=TEXT_MUTED)
         page.update()
 
         def worker():
             try:
                 value = vonage_api.get_balance()
-                balance_text.value = f"{value:.2f} EUR"
+                display = f"{value:.2f} EUR"
             except Exception:
-                balance_text.value = "— EUR"
+                display = "— EUR"
 
-            balance_ring.visible = False
+            balance_controls["value"] = display
+            text.value = display
+            button.icon = ft.Icons.REFRESH_ROUNDED
             page.update()
 
         page.run_thread(worker)
 
+    def build_balance_row() -> ft.Row:
+        text = ft.Text(balance_controls["value"], size=13, weight=ft.FontWeight.W_600, color=TEXT)
+        refresh_btn = ft.IconButton(ft.Icons.REFRESH_ROUNDED, icon_size=16, icon_color=TEXT_MUTED,
+                                     on_click=refresh_balance, tooltip="Refresh balance")
+        balance_controls["text"] = text
+        balance_controls["button"] = refresh_btn
+        return ft.Row(
+            [
+                ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET_ROUNDED, size=16, color=ACCENT),
+                text,
+                refresh_btn,
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        )
+
+    def view_heading(title: str, subtitle: str = "") -> ft.Control:
+        return ft.Row(
+            [section_title(title, subtitle), build_balance_row()],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
     # Single Send
     def build_single_send() -> ft.Control:
-        number = text_field("Recipient number", "+1001234567", icon=ft.Icons.PHONE_IPHONE_ROUNDED)
+        number = text_field("Recipient number", "+1001234567", icon=ft.Icons.PHONE_IPHONE_ROUNDED,
+                            autofocus=True)
         sender = sender_id_field()
         message = text_field("Text", "Type your text…", multiline=True, lines=6)
         send_btn = primary_button("Send", icon=ft.Icons.SEND_ROUNDED)
+
+        def reset_send_btn():
+            set_button_loading(send_btn, False, "Send", icon=ft.Icons.SEND_ROUNDED)
 
         def do_send(e):
             number.error = None
             if not number.value or not sender.value or not message.value:
                 notify("Fill in number, sender and message first.", ok=False)
                 return
-            if not api.is_valid_phone(number.value):
-                number.error = "Not a valid phone number"
-                number.update()
-                notify("That doesn't look like a valid phone number.", ok=False)
-                return
 
-            send_btn.disabled = True
-            send_btn.content = "Sending…"
+            set_button_loading(send_btn, True, "Checking…")
             page.update()
 
             def worker():
+                try:
+                    vonage_api.validate_number(number.value)
+                except vonage_api.NumberInvalidError:
+                    number.error = "Not a valid phone number"
+                    number.update()
+                    notify("That doesn't look like a valid phone number.", ok=False)
+                    reset_send_btn()
+                    page.update()
+                    return
+                except vonage_api.NumberUnverifiableError as exc:
+                    notify(f"Couldn't verify the number: {describe_error(exc)}", ok=False)
+                    reset_send_btn()
+                    page.update()
+                    return
+
+                set_button_loading(send_btn, True, "Sending…")
+                page.update()
                 try:
                     vonage_api.send_sms(number.value, sender.value, message.value)
                     notify("Message sent successfully.")
@@ -293,8 +366,7 @@ def main(page: ft.Page) -> None:
                 except Exception as exc:
                     notify(f"Send failed: {describe_error(exc)}", ok=False)
                 finally:
-                    send_btn.disabled = False
-                    send_btn.content = "Send"
+                    reset_send_btn()
                     page.update()
                     refresh_balance()
 
@@ -304,7 +376,7 @@ def main(page: ft.Page) -> None:
 
         return ft.Column(
             [
-                section_title("Single Send", "Send one message to one recipient."),
+                view_heading("Single Send", "Send one message to one recipient."),
                 ft.Container(height=10),
                 card(
                     ft.Column(
@@ -341,18 +413,34 @@ def main(page: ft.Page) -> None:
             page.update()
 
         select_all.on_change = toggle_all
+        select_all.disabled = not contacts
 
-        contacts_list = ft.ListView(
-            [contact_row(c) for c in contacts],
-            spacing=4,
-            expand=True,
-        )
+        if contacts:
+            recipients_body = ft.ListView(
+                [contact_row(c) for c in contacts],
+                spacing=4,
+                expand=True,
+            )
+        else:
+            recipients_body = ft.Container(
+                content=ft.Text(
+                    "No saved contacts yet.\nAdd some in Contacts, or use Extra numbers.",
+                    color=TEXT_MUTED, size=13, text_align=ft.TextAlign.CENTER,
+                ),
+                alignment=ft.Alignment.CENTER,
+                expand=True,
+                padding=pad(24, 12),
+            )
 
         manual = text_field("Extra numbers (one per line)", "+1001234567\n+1009876543",
                              multiline=True, lines=3)
         sender = sender_id_field()
         message = text_field("Message", "Type your text…", multiline=True, expand=True)
         send_btn = primary_button("Send to all", icon=ft.Icons.SEND_AND_ARCHIVE_ROUNDED)
+
+        progress_text = ft.Text("", size=12, color=TEXT_MUTED)
+        progress_bar = ft.ProgressBar(value=0, color=ACCENT, bgcolor=SURFACE_2)
+        progress_area = ft.Column([progress_text, progress_bar], spacing=6, visible=False)
 
         def manual_lines() -> list[str]:
             return [line.strip() for line in (manual.value or "").splitlines() if line.strip()]
@@ -362,42 +450,71 @@ def main(page: ft.Page) -> None:
             numbers.extend(manual_lines())
             return numbers
 
+        def reset_send_btn():
+            progress_area.visible = False
+            set_button_loading(send_btn, False, "Send to all",
+                               icon=ft.Icons.SEND_AND_ARCHIVE_ROUNDED)
+
         def do_send(e):
             manual.error = None
-
-            invalid = [line for line in manual_lines() if not api.is_valid_phone(line)]
-            if invalid:
-                manual.error = "Invalid number(s): " + ", ".join(invalid)
-                manual.update()
-                notify("Extra numbers contains an invalid phone number.", ok=False)
-                return
 
             numbers = collect_numbers()
             if not numbers:
                 notify("Select at least one contact or add a number.", ok=False)
                 return
-            
+
             if not sender.value or not message.value:
                 notify("Fill in sender and message first.", ok=False)
                 return
 
-            send_btn.disabled = True
-            send_btn.content = "Sending…"
+            set_button_loading(send_btn, True, "Checking…")
+            progress_area.visible = True
+            progress_bar.value = None  # indeterminate while validating
+            progress_text.value = "Checking numbers…"
             page.update()
 
             def worker():
+                invalid = []
+                for n in manual_lines():
+                    try:
+                        vonage_api.validate_number(n)
+                    except vonage_api.NumberInvalidError:
+                        invalid.append(n)
+                    except vonage_api.NumberUnverifiableError as exc:
+                        notify(f"Couldn't verify numbers: {describe_error(exc)}", ok=False)
+                        reset_send_btn()
+                        page.update()
+                        return
+
+                if invalid:
+                    manual.error = "Invalid number(s): " + ", ".join(invalid)
+                    manual.update()
+                    notify("Extra numbers contains an invalid phone number.", ok=False)
+                    reset_send_btn()
+                    page.update()
+                    return
+
+                total = len(numbers)
+                progress_bar.value = 0
+                progress_text.value = f"Sending 0 of {total}…"
+                page.update()
+
                 failed = 0
-                for n in numbers:
+                for i, n in enumerate(numbers, start=1):
                     try:
                         vonage_api.send_sms(n, sender.value, message.value)
                     except Exception:
                         failed += 1
+                    progress_bar.value = i / total
+                    progress_text.value = f"Sending {i} of {total}…"
+                    page.update()
+
                 if failed:
-                    notify(f"Sent {len(numbers) - failed}/{len(numbers)} — {failed} failed.", ok=False)
+                    notify(f"Sent {total - failed}/{total} — {failed} failed.", ok=False)
                 else:
-                    notify(f"Sent to all {len(numbers)} recipients.")
-                send_btn.disabled = False
-                send_btn.content = "Send to all"
+                    notify(f"Sent to all {total} recipients.")
+
+                reset_send_btn()
                 page.update()
                 refresh_balance()
 
@@ -407,7 +524,7 @@ def main(page: ft.Page) -> None:
 
         left = card(
             ft.Column(
-                [section_title("Recipients"), select_all, ft.Divider(color=BORDER, height=1), contacts_list],
+                [section_title("Recipients"), select_all, ft.Divider(color=BORDER, height=1), recipients_body],
                 spacing=10,
                 expand=True,
             ),
@@ -423,6 +540,7 @@ def main(page: ft.Page) -> None:
                     sender,
                     labeled("Message", message, expand=True),
                     send_btn,
+                    progress_area,
                 ],
                 spacing=14,
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -434,7 +552,7 @@ def main(page: ft.Page) -> None:
 
         return ft.Column(
             [
-                section_title("Multiple Send", "Send the same message to several recipients at once."),
+                view_heading("Multiple Send", "Send the same message to several recipients at once."),
                 ft.Container(height=10),
                 ft.Row([left, right], spacing=16, vertical_alignment=ft.CrossAxisAlignment.START, expand=True),
             ],
@@ -444,7 +562,7 @@ def main(page: ft.Page) -> None:
 
     # Contacts
     def build_contacts() -> ft.Control:
-        name_f = text_field("Name", "Jane Doe", icon=ft.Icons.PERSON_ROUNDED, expand=1)
+        name_f = text_field("Name", "John Doe", icon=ft.Icons.PERSON_ROUNDED, expand=1, autofocus=True)
         phone_f = text_field("Phone number", "+1001234567", icon=ft.Icons.PHONE_IPHONE_ROUNDED, expand=1)
 
         list_view = ft.ListView(spacing=6, expand=True)
@@ -469,7 +587,7 @@ def main(page: ft.Page) -> None:
                 api.delete_contact(idx)
                 render_contacts()
 
-            return ft.Container(
+            tile = ft.Container(
                 content=ft.Row(
                     [
                         ft.CircleAvatar(content=ft.Text(c.name[:1].upper() or "?"), bgcolor=AVATAR_BG, color=ACCENT),
@@ -489,42 +607,71 @@ def main(page: ft.Page) -> None:
                 bgcolor=SURFACE_2,
                 border_radius=10,
                 padding=pad(8, 14),
+                animate=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
             )
+
+            def on_hover(e):
+                tile.bgcolor = SURFACE_3 if e.data else SURFACE_2
+                tile.update()
+
+            tile.on_hover = on_hover
+            return tile
+
+        add_btn = ft.IconButton(
+            ft.Icons.PERSON_ADD_ROUNDED,
+            icon_color="#FFFFFF",
+            icon_size=16,
+            bgcolor=AVATAR_BG,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+            tooltip="Add contact",
+        )
 
         def do_add(e):
             phone_f.error = None
             if not name_f.value or not phone_f.value:
                 notify("Enter both a name and a phone number.", ok=False)
                 return
-            if not api.is_valid_phone(phone_f.value):
-                phone_f.error = "Not a valid phone number"
-                phone_f.update()
-                notify("That doesn't look like a valid phone number.", ok=False)
-                return
-            api.add_contact(name_f.value, phone_f.value)
-            name_f.value = ""
-            phone_f.value = ""
-            render_contacts()
+
+            add_btn.disabled = True
             page.update()
+
+            def worker():
+                try:
+                    try:
+                        vonage_api.validate_number(phone_f.value)
+                    except vonage_api.NumberInvalidError:
+                        phone_f.error = "Not a valid phone number"
+                        phone_f.update()
+                        notify("That doesn't look like a valid phone number.", ok=False)
+                        return
+                    except vonage_api.NumberUnverifiableError as exc:
+                        notify(f"Couldn't verify the number: {describe_error(exc)}", ok=False)
+                        return
+
+                    api.add_contact(name_f.value, phone_f.value)
+                    name_f.value = ""
+                    phone_f.value = ""
+                    render_contacts()
+                    notify("Contact added.")
+                finally:
+                    add_btn.disabled = False
+                    page.update()
+
+            page.run_thread(worker)
+
+        add_btn.on_click = do_add
+        phone_f.on_submit = do_add
 
         render_contacts()
 
         return ft.Column(
             [
-                section_title("Contacts", "Saved recipients you can reuse from Multiple Send."),
+                view_heading("Contacts", "Saved recipients you can reuse from Multiple Send."),
                 ft.Container(height=10),
                 card(
                     ft.Column(
                         [
-                            ft.Row([name_f, phone_f, ft.IconButton(
-                                        ft.Icons.PERSON_ADD_ROUNDED,
-                                        icon_color="#FFFFFF",
-                                        icon_size=16,
-                                        bgcolor=AVATAR_BG,
-                                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
-                                        on_click=do_add,
-                                        tooltip="Add contact",
-                                    )],
+                            ft.Row([name_f, phone_f, add_btn],
                                     spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             ft.Divider(color=BORDER, height=1),
                             list_view,
@@ -541,7 +688,6 @@ def main(page: ft.Page) -> None:
         )
 
     # Settings
-
     def build_settings() -> ft.Control:
         creds = api.get_credentials()
         key_f = text_field("Vonage API key", icon=ft.Icons.KEY_ROUNDED, value=creds[0] if creds else "")
@@ -555,8 +701,7 @@ def main(page: ft.Page) -> None:
                 return
             key, secret = creds
 
-            save_btn.disabled = True
-            save_btn.content = "Verifying…"
+            set_button_loading(save_btn, True, "Verifying…")
             page.update()
 
             def worker():
@@ -573,17 +718,17 @@ def main(page: ft.Page) -> None:
                     notify("Credentials updated.")
                     refresh_balance()
                 finally:
-                    save_btn.disabled = False
-                    save_btn.content = "Save credentials"
+                    set_button_loading(save_btn, False, "Save credentials", icon=ft.Icons.SAVE_ROUNDED)
                     page.update()
 
             page.run_thread(worker)
 
         save_btn.on_click = do_save
+        secret_f.on_submit = do_save
 
         return ft.Column(
             [
-                section_title("Settings", "Update the Vonage API credentials used to send messages."),
+                view_heading("Settings", "Update the Vonage API credentials used to send messages."),
                 ft.Container(height=10),
                 card(
                     ft.Column(
@@ -597,7 +742,6 @@ def main(page: ft.Page) -> None:
         )
 
     # Layout
-
     views = [
         ("Single Send", ft.Icons.SEND_ROUNDED, build_single_send),
         ("Multiple Send", ft.Icons.SEND_AND_ARCHIVE_ROUNDED, build_multi_send),
@@ -616,7 +760,6 @@ def main(page: ft.Page) -> None:
 
     def show_view(index: int) -> None:
         title, _, builder = views[index]
-        view_title.value = title
         content.content = ft.Container(
             builder(),
             padding=ft.Padding(left=24, top=24, right=24, bottom=32),
@@ -686,36 +829,15 @@ def main(page: ft.Page) -> None:
         bgcolor=SURFACE,
     )
 
-    header = ft.Container(
-        content=ft.Row(
-            [
-                view_title,
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET_ROUNDED, size=16, color=ACCENT),
-                        balance_text,
-                        balance_ring,
-                        ft.IconButton(ft.Icons.REFRESH_ROUNDED, icon_size=16, icon_color=TEXT_MUTED,
-                                       on_click=refresh_balance, tooltip="Refresh balance"),
-                    ],
-                    spacing=8,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        ),
-        padding=pad(16, 24),
-        border=border_bottom(BORDER),
-    )
-
     app_shell = ft.Row(
-        [rail_pane, ft.VerticalDivider(width=1, color=BORDER), ft.Column([header, content], spacing=0, expand=True)],
+        [rail_pane, ft.VerticalDivider(width=1, color=BORDER), content],
         spacing=0,
         expand=True,
     )
 
     # Login Panel
     def show_onboarding() -> None:
-        key_f = text_field("Vonage API key", icon=ft.Icons.KEY_ROUNDED)
+        key_f = text_field("Vonage API key", icon=ft.Icons.KEY_ROUNDED, autofocus=True)
         secret_f = text_field("Vonage API secret", icon=ft.Icons.LOCK_ROUNDED, password=True)
         start_btn = primary_button("Continue", icon=ft.Icons.ARROW_FORWARD_ROUNDED)
 
@@ -725,8 +847,7 @@ def main(page: ft.Page) -> None:
                 return
             key, secret = creds
 
-            start_btn.disabled = True
-            start_btn.content = "Verifying…"
+            set_button_loading(start_btn, True, "Verifying…")
             page.update()
 
             def worker():
@@ -736,13 +857,11 @@ def main(page: ft.Page) -> None:
                     secret_f.error = "No Vonage account found for this key and secret"
                     secret_f.update()
                     notify("Vonage rejected those credentials — no such account.", ok=False)
-                    start_btn.disabled = False
-                    start_btn.content = "Continue"
+                    set_button_loading(start_btn, False, "Continue", icon=ft.Icons.ARROW_FORWARD_ROUNDED)
                     page.update()
                 except vonage_api.CredentialsUnverifiableError as exc:
                     notify(f"Couldn't reach Vonage to verify credentials: {describe_error(exc)}", ok=False)
-                    start_btn.disabled = False
-                    start_btn.content = "Continue"
+                    set_button_loading(start_btn, False, "Continue", icon=ft.Icons.ARROW_FORWARD_ROUNDED)
                     page.update()
                 else:
                     api.save_credentials(key, secret)
@@ -756,6 +875,7 @@ def main(page: ft.Page) -> None:
             page.run_thread(worker)
 
         start_btn.on_click = do_start
+        secret_f.on_submit = do_start
 
         footer = ft.Text(
             spans=[
