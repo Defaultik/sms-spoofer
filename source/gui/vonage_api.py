@@ -1,10 +1,13 @@
 import re
 from functools import lru_cache
 
+from pydantic import ValidationError
 from requests.exceptions import RequestException
 from vonage import Vonage, Auth
 from vonage_sms import SmsMessage, SmsResponse
 from vonage_account import Balance
+from vonage_number_insight import BasicInsightRequest
+from vonage_number_insight.errors import NumberInsightError
 from vonage_http_client.errors import AuthenticationError, HttpRequestError
 
 from api import normalize, get_credentials
@@ -19,6 +22,16 @@ class CredentialsInvalidError(Exception):
 
 class CredentialsUnverifiableError(Exception):
     """Vonage couldn't be reached to check the credentials (network issue)."""
+
+
+class NumberInvalidError(Exception):
+    """Vonage Number Insight rejected the number — it isn't a valid, dialable
+    phone number."""
+
+
+class NumberUnverifiableError(Exception):
+    """Vonage Number Insight couldn't be reached to check the number (network
+    issue)."""
 
 
 def is_valid_api_key(api_key: str) -> bool:
@@ -58,6 +71,20 @@ def _client() -> Vonage:
 
 def reset_client_cache() -> None:
     _get_client.cache_clear()
+
+
+def validate_number(number: str) -> None:
+    try:
+        request = BasicInsightRequest(number=normalize(number))
+    except ValidationError as exc:
+        raise NumberInvalidError("That doesn't look like a valid phone number.") from exc
+
+    try:
+        _client().number_insight.get_basic_info(request)
+    except NumberInsightError as exc:
+        raise NumberInvalidError("Vonage couldn't validate this number.") from exc
+    except Exception as exc:
+        raise NumberUnverifiableError(str(exc) or exc.__class__.__name__) from exc
 
 
 def send_sms(number: str, sender: str, text: str) -> SmsResponse:
