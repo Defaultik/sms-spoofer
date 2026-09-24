@@ -24,7 +24,7 @@ A clean CLI, Perfect for any use case where the sender name matters
 
 ## 📸 Preview
 
-> ![alt-text](https://i.imgur.com/q5lt3sE.png)
+> ![alt-text](https://i.imgur.com/IgQ3FIv.png)
 
 ---
 
