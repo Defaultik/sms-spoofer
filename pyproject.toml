@@ -10,6 +10,7 @@ dependencies = [
     "vonage-sms>=1.0.0",
     "flet[desktop]>=1.0.0",
     "requests>=2.32.0",
+    "cryptography>=50.0.0",
 ]
 
 [project.urls]
