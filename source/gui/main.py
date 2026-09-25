@@ -1,6 +1,7 @@
 import sys
 import os
 import math
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -57,6 +58,13 @@ def format_cost(total: float | None, currency: str, segments: int, recipients: i
     if total is None:
         return detail
     return f"≈ {total:.4f} {currency} · {detail}"
+
+
+def format_timestamp(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso
 
 
 # Style
@@ -428,6 +436,7 @@ def main(page: ft.Page) -> None:
                 page.update()
                 try:
                     vonage_api.send_sms(number.value, sender.value, message.value)
+                    api.record_send(number.value, sender.value, message.value)
                     notify("Message sent successfully.")
                     message.value = ""
                 except Exception as exc:
@@ -623,6 +632,7 @@ def main(page: ft.Page) -> None:
                 for i, n in enumerate(numbers, start=1):
                     try:
                         vonage_api.send_sms(n, sender.value, message.value)
+                        api.record_send(n, sender.value, message.value)
                     except Exception:
                         failed += 1
                     progress_bar.value = i / total
@@ -808,6 +818,111 @@ def main(page: ft.Page) -> None:
             expand=True,
         )
 
+    # History
+    def build_history() -> ft.Control:
+        list_view = ft.ListView(spacing=6, expand=True)
+
+        def render_history():
+            list_view.controls.clear()
+            entries = api.load_history()
+            if not entries:
+                list_view.controls.append(
+                    ft.Container(
+                        content=ft.Text(
+                            "No messages sent yet.\nMessages you send will show up here.",
+                            color=TEXT_MUTED, size=13, text_align=ft.TextAlign.CENTER,
+                        ),
+                        alignment=ft.Alignment.CENTER,
+                        expand=True,
+                        padding=pad(24, 12),
+                    )
+                )
+            else:
+                for entry in entries:
+                    list_view.controls.append(history_tile(entry))
+            page.update()
+
+        def history_tile(entry: api.HistoryEntry) -> ft.Control:
+            resend_btn = ft.IconButton(ft.Icons.REPLAY_ROUNDED, icon_color=ACCENT,
+                                        tooltip="Send this message again")
+
+            def do_resend(e):
+                resend_btn.disabled = True
+                resend_btn.update()
+
+                def worker():
+                    try:
+                        vonage_api.send_sms(entry.recipient, entry.sender_id, entry.text)
+                        api.record_send(entry.recipient, entry.sender_id, entry.text)
+                        notify("Message sent again.")
+                        render_history()
+                    except Exception as exc:
+                        notify(f"Send failed: {describe_error(exc)}", ok=False)
+                        resend_btn.disabled = False
+                        resend_btn.update()
+                    finally:
+                        refresh_balance()
+
+                page.run_thread(worker)
+
+            resend_btn.on_click = do_resend
+
+            tile = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.BADGE_ROUNDED, size=14, color=ACCENT),
+                                        ft.Text(entry.sender_id, color=TEXT,
+                                                weight=ft.FontWeight.W_600, size=13),
+                                        ft.Icon(ft.Icons.ARROW_RIGHT_ALT_ROUNDED, size=16, color=TEXT_MUTED),
+                                        ft.Text(entry.recipient, color=TEXT_MUTED, size=12),
+                                    ],
+                                    spacing=6,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.Text(entry.text, color=TEXT, size=12, max_lines=2,
+                                        overflow=ft.TextOverflow.ELLIPSIS),
+                                ft.Text(format_timestamp(entry.sent_at), color=TEXT_MUTED, size=11),
+                            ],
+                            spacing=4,
+                            expand=True,
+                        ),
+                        resend_btn,
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                bgcolor=SURFACE_2,
+                border_radius=10,
+                padding=pad(10, 14),
+                animate=ft.Animation(120, ft.AnimationCurve.EASE_OUT),
+            )
+
+            def on_hover(e):
+                tile.bgcolor = SURFACE_3 if e.data else SURFACE_2
+                tile.update()
+
+            tile.on_hover = on_hover
+            return tile
+
+        render_history()
+
+        return ft.Column(
+            [
+                view_heading("History", "Messages you've sent, most recent first."),
+                ft.Container(height=10),
+                card(
+                    ft.Column([list_view], spacing=14, expand=True),
+                    padding=pad(20, 20),
+                    expand=True,
+                ),
+            ],
+            spacing=0,
+            expand=True,
+        )
+
     # Settings
     def build_settings() -> ft.Control:
         creds = api.get_credentials()
@@ -867,6 +982,7 @@ def main(page: ft.Page) -> None:
         ("Single Send", ft.Icons.SEND_ROUNDED, build_single_send),
         ("Multiple Send", ft.Icons.SEND_AND_ARCHIVE_ROUNDED, build_multi_send),
         ("Contacts", ft.Icons.CONTACTS_ROUNDED, build_contacts),
+        ("History", ft.Icons.HISTORY_ROUNDED, build_history),
         ("Settings", ft.Icons.SETTINGS_ROUNDED, build_settings),
     ]
 

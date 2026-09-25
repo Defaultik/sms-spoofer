@@ -9,6 +9,7 @@ import os
 import csv
 import configparser
 from dataclasses import dataclass
+from datetime import datetime
 
 import requests
 from requests.exceptions import RequestException
@@ -17,6 +18,8 @@ DATA_DIR = "data"
 CONFIG_PATH = os.path.join(DATA_DIR, "config.ini")
 CONTACTS_PATH = os.path.join(DATA_DIR, "contacts.csv")
 CONTACTS_FIELDS = ("name", "phone_number")
+HISTORY_PATH = os.path.join(DATA_DIR, "history.csv")
+HISTORY_FIELDS = ("recipient", "sender_id", "text", "sent_at")
 
 _PHONE_JUNK = str.maketrans("", "", "+- ")
 
@@ -73,6 +76,9 @@ def ensure_data_dir() -> None:
     if not os.path.exists(CONTACTS_PATH):
         with open(CONTACTS_PATH, "w", newline="") as f:
             csv.DictWriter(f, fieldnames=CONTACTS_FIELDS).writeheader()
+    if not os.path.exists(HISTORY_PATH):
+        with open(HISTORY_PATH, "w", newline="") as f:
+            csv.DictWriter(f, fieldnames=HISTORY_FIELDS).writeheader()
 
 
 def credentials_exist() -> bool:
@@ -141,3 +147,32 @@ def delete_contact(index: int) -> None:
     contacts = load_contacts()
     del contacts[index]
     save_contacts(contacts)
+
+
+@dataclass
+class HistoryEntry:
+    recipient: str
+    sender_id: str
+    text: str
+    sent_at: str
+
+
+def load_history() -> list[HistoryEntry]:
+    ensure_data_dir()
+    with open(HISTORY_PATH, newline="") as f:
+        entries = [HistoryEntry(**row) for row in csv.DictReader(f)]
+    entries.reverse()  # newest first
+    return entries
+
+
+def record_send(recipient: str, sender_id: str, text: str) -> None:
+    ensure_data_dir()
+    with open(HISTORY_PATH, "a", newline="") as f:
+        csv.DictWriter(f, fieldnames=HISTORY_FIELDS).writerow(
+            {
+                "recipient": recipient,
+                "sender_id": sender_id,
+                "text": text,
+                "sent_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
