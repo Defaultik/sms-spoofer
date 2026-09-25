@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from requests.exceptions import RequestException
 from vonage import Vonage, Auth
 from vonage_sms import SmsMessage, SmsResponse
-from vonage_account import Balance
+from vonage_account import Balance, GetCountryPricingRequest, ServiceType
 from vonage_number_insight import BasicInsightRequest
 from vonage_number_insight.errors import NumberInsightError
 from vonage_http_client.errors import AuthenticationError, HttpRequestError
@@ -71,20 +71,35 @@ def _client() -> Vonage:
 
 def reset_client_cache() -> None:
     _get_client.cache_clear()
+    get_sms_price.cache_clear()
 
 
-def validate_number(number: str) -> None:
+def get_country_code(number: str) -> str:
     try:
         request = BasicInsightRequest(number=normalize(number))
     except ValidationError as exc:
         raise NumberInvalidError("That doesn't look like a valid phone number.") from exc
 
     try:
-        _client().number_insight.get_basic_info(request)
+        info = _client().number_insight.get_basic_info(request)
     except NumberInsightError as exc:
         raise NumberInvalidError("Vonage couldn't validate this number.") from exc
     except Exception as exc:
         raise NumberUnverifiableError(str(exc) or exc.__class__.__name__) from exc
+
+    return info.country_code
+
+
+def validate_number(number: str) -> None:
+    get_country_code(number)
+
+
+@lru_cache(maxsize=64)
+def get_sms_price(country_code: str) -> tuple[float, str]:
+    request = GetCountryPricingRequest(country_code=country_code, type=ServiceType.SMS)
+    pricing = _client().account.get_country_pricing(request)
+
+    return float(pricing.default_price), pricing.currency
 
 
 def send_sms(number: str, sender: str, text: str) -> SmsResponse:

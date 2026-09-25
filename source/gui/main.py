@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -38,6 +39,24 @@ def read_version() -> str:
         pass
 
     return ""
+
+
+def sms_segments(text: str) -> int:
+    """Number of SMS parts for `text`. Messages are sent as unicode (UCS-2):
+    70 chars in a single part, 67 per part once concatenated."""
+    units = len(text.encode("utf-16-le")) // 2  # UCS-2 code units (emoji = 2)
+    if not units:
+        return 0
+    return 1 if units <= 70 else math.ceil(units / 67)
+
+
+def format_cost(total: float | None, currency: str, segments: int, recipients: int = 1) -> str:
+    detail = f"{segments} part" + ("s" if segments != 1 else "")
+    if recipients > 1:
+        detail += f" × {recipients} numbers"
+    if total is None:
+        return detail
+    return f"≈ {total:.4f} {currency} · {detail}"
 
 
 # Style
@@ -200,6 +219,18 @@ def set_button_loading(button: ft.FilledButton, loading: bool, label: str, icon=
         button.content = label
 
 
+def cost_indicator() -> tuple[ft.Row, ft.Text]:
+    text = ft.Text("", size=12, color=TEXT_MUTED)
+    row = ft.Row(
+        [ft.Icon(ft.Icons.SELL_ROUNDED, size=15, color=TEXT_MUTED), text],
+        spacing=6,
+        tight=True,
+        visible=False,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+    return row, text
+
+
 # App
 def main(page: ft.Page) -> None:
     page.title = "SMS Spoofer - github.com/Defaultik"
@@ -329,6 +360,42 @@ def main(page: ft.Page) -> None:
         message = text_field("Text", "Type your text…", multiline=True, lines=6)
         send_btn = primary_button("Send", icon=ft.Icons.SEND_ROUNDED)
 
+        cost_row, cost_text = cost_indicator()
+        est = {"price": None, "currency": "", "number": ""}
+
+        def render_estimate():
+            segments = sms_segments(message.value or "")
+            if segments == 0:
+                cost_row.visible = False
+            else:
+                price = est["price"]
+                total = price * segments if price is not None else None
+                cost_text.value = format_cost(total, est["currency"], segments)
+                cost_row.visible = True
+            cost_row.update()
+
+        def price_number(e=None):
+            num = (number.value or "").strip()
+            if num == est["number"] and est["price"] is not None:
+                return
+            est.update(number=num, price=None, currency="")
+            render_estimate()
+            if not num:
+                return
+
+            def worker():
+                try:
+                    price, currency = vonage_api.get_sms_price(vonage_api.get_country_code(num))
+                    est.update(price=price, currency=currency)
+                except Exception:
+                    est.update(price=None, currency="")
+                render_estimate()
+
+            page.run_thread(worker)
+
+        message.on_change = lambda e: render_estimate()
+        number.on_blur = price_number
+
         def reset_send_btn():
             set_button_loading(send_btn, False, "Send", icon=ft.Icons.SEND_ROUNDED)
 
@@ -384,7 +451,12 @@ def main(page: ft.Page) -> None:
                             number,
                             ft.Row([sender], spacing=12),
                             labeled("Text", message),
-                            ft.Row([send_btn], alignment=ft.MainAxisAlignment.START),
+                            ft.Row(
+                                [send_btn, cost_row],
+                                spacing=16,
+                                alignment=ft.MainAxisAlignment.START,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
                         ],
                         spacing=16,
                     ),
@@ -400,7 +472,8 @@ def main(page: ft.Page) -> None:
 
         def contact_row(c: api.Contact) -> ft.Control:
             cb = ft.Checkbox(label=f"{c.name}  ·  {c.phone_number}", value=False,
-                              active_color=ACCENT, label_style=ft.TextStyle(color=TEXT, size=13))
+                              active_color=ACCENT, label_style=ft.TextStyle(color=TEXT, size=13),
+                              on_change=lambda e: recompute_recipient_prices())
             checkboxes.append(cb)
             return cb
 
@@ -411,6 +484,7 @@ def main(page: ft.Page) -> None:
             for cb in checkboxes:
                 cb.value = select_all.value
             page.update()
+            recompute_recipient_prices()
 
         select_all.on_change = toggle_all
         select_all.disabled = not contacts
@@ -449,6 +523,52 @@ def main(page: ft.Page) -> None:
             numbers = [c.phone_number for c, cb in zip(contacts, checkboxes) if cb.value]
             numbers.extend(manual_lines())
             return numbers
+
+        cost_row, cost_text = cost_indicator()
+        est = {"unit_sum": None, "currency": "", "count": 0, "seq": 0}
+
+        def render_estimate():
+            segments = sms_segments(message.value or "")
+            count = est["count"]
+            if count == 0 or segments == 0:
+                cost_row.visible = False
+            else:
+                unit_sum = est["unit_sum"]
+                total = unit_sum * segments if unit_sum is not None else None
+                cost_text.value = format_cost(total, est["currency"], segments, recipients=count)
+                cost_row.visible = True
+            cost_row.update()
+
+        def recompute_recipient_prices(e=None):
+            numbers = collect_numbers()
+            est["count"] = len(numbers)
+            est["seq"] += 1
+            seq = est["seq"]
+            if not numbers:
+                est["unit_sum"] = None
+                render_estimate()
+                return
+            render_estimate()
+
+            def worker():
+                unit_sum, currency, ok = 0.0, est["currency"], True
+                for n in numbers:
+                    try:
+                        price, currency = vonage_api.get_sms_price(vonage_api.get_country_code(n))
+                        unit_sum += price
+                    except Exception:
+                        ok = False
+                        break
+                if seq != est["seq"]:
+                    return  # a newer change superseded this run
+                est["unit_sum"] = unit_sum if ok else None
+                est["currency"] = currency
+                render_estimate()
+
+            page.run_thread(worker)
+
+        message.on_change = lambda e: render_estimate()
+        manual.on_blur = recompute_recipient_prices
 
         def reset_send_btn():
             progress_area.visible = False
@@ -540,6 +660,7 @@ def main(page: ft.Page) -> None:
                     sender,
                     labeled("Message", message, expand=True),
                     send_btn,
+                    cost_row,
                     progress_area,
                 ],
                 spacing=14,
