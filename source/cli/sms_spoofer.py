@@ -27,7 +27,7 @@ def log(prefix: str, message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="SMS Spoofer", description="Send SMS with any CallerID and Any content")
     parser.add_argument("-n", "--number", required=True, help="recipient's phone number")
-    parser.add_argument("-s", "--sender", required=True, help="sender name (callerid)")
+    parser.add_argument("-s", "--sender", required=True, help="sender name (CallerID)")
     parser.add_argument("-t", "--text", required=True, help="message content")
 
     return parser.parse_args()
