@@ -1,10 +1,3 @@
-"""
-Application layer for the GUI: credentials/config storage, contacts storage,
-phone helpers and the update check. Vonage service access lives in
-source/gui/vonage_api.py. No UI code lives here — source/gui/main.py is the
-only module that imports Flet.
-"""
-
 import os
 import csv
 import configparser
@@ -33,11 +26,6 @@ def normalize(phone_number: str) -> str:
     return phone_number.translate(_PHONE_JUNK)
 
 
-def is_valid_phone(phone_number: str) -> bool:
-    digits = normalize(phone_number)
-    return digits.isdigit() and 7 <= len(digits) <= 15
-
-
 def _parse_version(version: str) -> tuple[int, ...]:
     try:
         return tuple(int(part) for part in version.strip().split("."))
@@ -49,7 +37,7 @@ def _version_from_pyproject(text: str) -> str:
     for line in text.splitlines():
         if line.startswith("version"):
             return line.split("=", 1)[1].strip().strip("\"'")
-        
+
     return ""
 
 
@@ -59,7 +47,7 @@ def fetch_latest_version() -> str | None:
         response.raise_for_status()
     except RequestException:
         return None
-    
+
     return _version_from_pyproject(response.text) or None
 
 
@@ -67,7 +55,7 @@ def is_outdated(current: str, latest: str) -> bool:
     current_parts, latest_parts = _parse_version(current), _parse_version(latest)
     if current_parts and latest_parts:
         return latest_parts > current_parts
-    
+
     return latest != current
 
 
@@ -84,7 +72,7 @@ def ensure_data_dir() -> None:
 def credentials_exist() -> bool:
     if not os.path.exists(CONFIG_PATH):
         return False
-    
+
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
 
@@ -96,7 +84,7 @@ def credentials_exist() -> bool:
 def get_credentials() -> tuple[str, str] | None:
     if not credentials_exist():
         return None
-    
+
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
     return (
