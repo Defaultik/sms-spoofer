@@ -14,7 +14,7 @@
 <br/>
 
 **Utility to send SMS messages with a custom Sender ID**  
-A clean CLI, Perfect for any use case where the sender name matters
+A clean GUI, Perfect for any use case where the sender name matters
 
 [🐛 Report Bug](https://github.com/Defaultik/sms_spoofer/issues) / [💡 Request Feature](https://github.com/Defaultik/sms_spoofer/issues)
 
